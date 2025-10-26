@@ -166,7 +166,72 @@ def get_top_process():
 
 @app.route('/api/alerts')
 def get_alerts():
-    return jsonify(list(reversed(list(alert_history)))[:20])
+    cpu = psutil.cpu_percent(interval=0.1)
+    memory = psutil.virtual_memory().percent
+    disk = psutil.disk_usage('/').percent
+
+    current_time = datetime.now().strftime("%H:%M:%S")
+    active_alerts = []
+
+    if cpu > 90:
+        active_alerts.append({
+            'id': 'ALERT-CPU-CRITICAL',
+            'title': 'CRITICAL CPU USAGE',
+            'severity': 'CRITICAL',
+            'message': f'CPU usage at {cpu:.1f}%',
+            'timestamp': current_time
+        })
+    elif cpu > 70:
+        active_alerts.append({
+            'id': 'ALERT-CPU-WARNING',
+            'title': 'HIGH CPU USAGE',
+            'severity': 'WARNING',
+            'message': f'CPU usage at {cpu:.1f}%',
+            'timestamp': current_time
+        })
+    if memory > 90:
+        active_alerts.append({
+            'id': 'ALERT-MEM-CRITICAL',
+            'title': 'CRITICAL MEMORY USAGE',
+            'severity': 'CRITICAL',
+            'message': f'Memory usage at {memory:.1f}%',
+            'timestamp': current_time
+        })
+    elif memory > 80:
+        active_alerts.append({
+            'id': 'ALERT-MEM-WARNING',
+            'title': 'HIGH MEMORY USAGE',
+            'severity': 'WARNING',
+            'message': f'Memory usage at {memory:.1f}%',
+            'timestamp': current_time
+        })
+    if disk > 90:
+        active_alerts.append({
+            'id': 'ALERT-DISK-CRITICAL',
+            'title': 'DISK SPACE CRITICAL',
+            'severity': 'CRITICAL',
+            'message': f'Disk usage at {disk:.1f}%',
+            'timestamp': current_time
+        })
+    elif disk > 85:
+        active_alerts.append({
+            'id': 'ALERT-DISK-WARNING',
+            'title': 'DISK SPACE LOW',
+            'severity': 'WARNING',
+            'message': f'Disk usage at {disk:.1f}%',
+            'timestamp': current_time
+        })
+    # If no active alerts, return healthy status
+    if len(active_alerts) == 0:
+        active_alerts.append({
+            'id': 'ALERT-HEALTHY',
+            'title': 'SYSTEM HEALTHY',
+            'severity': 'INFO',
+            'message': 'All metrics within normal range',
+            'timestamp': current_time
+        })
+    
+    return jsonify(active_alerts)
 
 @app.route('/api/services')
 def get_services():

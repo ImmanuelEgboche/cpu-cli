@@ -1,90 +1,183 @@
+import { useEffect, useState } from "react";
+import { api, SystemMetrics } from "@/lib/api"
+
 export const RadarVisualization = () => {
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const data = await api.getMetrics();
+        setMetrics(data);
+      } catch (error) {
+        console.error('Failed to fetch metrics:', error);
+      }
+    };
+
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 2000)
+    return () => clearInterval(interval)
+  }, []);
+
+  if (!metrics) {
+    return (
+      <div className="border border-primary/30 bg-card p-4">
+        <div className="mb-3">
+          <h3 className="text-xs text-secondary tracking-widest">SYSTEM HEALTH RADAR</h3>
+        </div>
+        <div className="aspect-square flex items-center justify-center text-xs text-muted-foreground">
+          Loading...
+        </div>
+      </div>
+    ); 
+  }
+
+  const radarData = [
+    { name: "CPU", value: metrics.cpu, angle: -90, color: "hsl(var(--terminal-green))" },      // North
+    { name: "MEMORY", value: metrics.memory, angle: 0, color: "hsl(var(--terminal-amber))" },  // East
+    { name: "DISK", value: metrics.disk, angle: 90, color: "hsl(var(--terminal-red))" },       // South
+    { name: "NETWORK", value: Math.min((metrics.network_io / 200) * 100, 100), angle: 180, color: "hsl(var(--terminal-green))" }, // West, normalized to 200 MB/s max
+  ]
+
+  const polarToCartesian = (angle: number, radius: number) => {
+    const rad = (angle * Math.PI) / 180;
+    return {
+      x: 200 + radius * Math.cos(rad),
+      y: 200 + radius * Math.sin(rad),
+    };
+  };
+
+  const getRadius = (percent: number) => {
+    return (Math.min(percent, 100) / 100) * 160;
+  }
+
+  const getStatusColor = (value: number, metric: string) => {
+    if (metric === "CPU" && value > 80) return "hsl(var(--terminal-red))";
+    if (metric === "MEMORY" && value > 85) return "hsl(var(--terminal-red))";
+    if (metric === "DISK" && value > 90) return "hsl(var(--terminal-red))";
+    if (metric === "CPU" && value > 60) return "hsl(var(--terminal-amber))";
+    if (metric === "MEMORY" && value > 70) return "hsl(var(--terminal-amber))";
+    if (metric === "DISK" && value > 80) return "hsl(var(--terminal-amber))";
+    return "hsl(var(--terminal-green))";
+  }
+
+  // creating polygon
+  const polygonPoints = radarData
+  .map((data) => {
+    const radius = getRadius(data.value);
+    const pos = polarToCartesian(data.angle, radius)
+    return `${pos.x}, ${pos.y}`;
+  })
+  .join(" ");
   return (
     <div className="border border-primary/30 bg-card p-4">
-      <div className="mb-3 flex justify-between items-center">
-        <h3 className="text-xs text-secondary tracking-widest">STAGING AND INITIALIZATION ENVIRONMENT</h3>
+      <div className="mb-3">
+        <h3 className="text-xs text-secondary tracking-widest">SYSTEM HEALTH RADAR</h3>
       </div>
       <div className="relative aspect-square max-w-md mx-auto">
-        {/* Concentric circles */}
         <svg className="w-full h-full" viewBox="0 0 400 400">
-          {/* Grid circles */}
-          <circle
-            cx="200"
-            cy="200"
-            r="180"
-            fill="none"
-            stroke="hsl(var(--terminal-green-dim))"
-            strokeWidth="1"
-            opacity="0.3"
-          />
-          <circle
-            cx="200"
-            cy="200"
-            r="140"
-            fill="none"
-            stroke="hsl(var(--terminal-green-dim))"
-            strokeWidth="1"
-            opacity="0.3"
-          />
-          <circle
-            cx="200"
-            cy="200"
-            r="100"
-            fill="none"
-            stroke="hsl(var(--terminal-green-dim))"
-            strokeWidth="1"
-            opacity="0.3"
-          />
-          <circle
-            cx="200"
-            cy="200"
-            r="60"
-            fill="none"
-            stroke="hsl(var(--terminal-green-dim))"
-            strokeWidth="1"
-            opacity="0.3"
+          {/* Background concentric circles (percentage rings) */}
+          {[160, 120, 80, 40].map((r, i) => (
+            <circle
+              key={i}
+              cx="200"
+              cy="200"
+              r={r}
+              fill="none"
+              stroke="hsl(var(--terminal-green-dim))"
+              strokeWidth="1"
+              opacity="0.2"
+            />
+          ))}
+
+          {/* Percentage labels */}
+          <text x="205" y="50" fontSize="8" fill="hsl(var(--terminal-green-dim))" opacity="0.4">100%</text>
+          <text x="205" y="90" fontSize="8" fill="hsl(var(--terminal-green-dim))" opacity="0.4">75%</text>
+          <text x="205" y="130" fontSize="8" fill="hsl(var(--terminal-green-dim))" opacity="0.4">50%</text>
+          <text x="205" y="170" fontSize="8" fill="hsl(var(--terminal-green-dim))" opacity="0.4">25%</text>
+
+          {/* Grid lines (cardinal directions) */}
+          <line x1="200" y1="40" x2="200" y2="360" stroke="hsl(var(--terminal-green-dim))" strokeWidth="1" opacity="0.2" />
+          <line x1="40" y1="200" x2="360" y2="200" stroke="hsl(var(--terminal-green-dim))" strokeWidth="1" opacity="0.2" />
+
+          {/* Filled polygon showing system health */}
+          <polygon
+            points={polygonPoints}
+            fill="hsl(var(--terminal-green))"
+            fillOpacity="0.1"
+            stroke="hsl(var(--terminal-green))"
+            strokeWidth="2"
+            strokeOpacity="0.6"
           />
 
-          {/* Grid lines */}
-          <line x1="200" y1="20" x2="200" y2="380" stroke="hsl(var(--terminal-green-dim))" strokeWidth="1" opacity="0.2" />
-          <line x1="20" y1="200" x2="380" y2="200" stroke="hsl(var(--terminal-green-dim))" strokeWidth="1" opacity="0.2" />
-          <line x1="73" y1="73" x2="327" y2="327" stroke="hsl(var(--terminal-green-dim))" strokeWidth="1" opacity="0.2" />
-          <line x1="73" y1="327" x2="327" y2="73" stroke="hsl(var(--terminal-green-dim))" strokeWidth="1" opacity="0.2" />
+          {/* Plot each metric point */}
+          {radarData.map((data, idx) => {
+            const radius = getRadius(data.value);
+            const pos = polarToCartesian(data.angle, radius);
+            const labelPos = polarToCartesian(data.angle, 185);
+            const color = getStatusColor(data.value, data.name);
 
-          {/* Agent markers */}
-          {/* Green agents (active) */}
-          <circle cx="180" cy="120" r="3" fill="hsl(var(--terminal-green))" className="drop-shadow-[0_0_6px_hsl(var(--terminal-green))]" />
-          <text x="180" y="115" fontSize="8" fill="hsl(var(--terminal-green))" textAnchor="middle">E-9</text>
-          <text x="180" y="135" fontSize="7" fill="hsl(var(--terminal-green))" textAnchor="middle">00:16</text>
+            return (
+              <g key={idx}>
+                {/* Connection line from center */}
+                <line
+                  x1="200"
+                  y1="200"
+                  x2={labelPos.x}
+                  y2={labelPos.y}
+                  stroke="hsl(var(--terminal-green-dim))"
+                  strokeWidth="1"
+                  opacity="0.3"
+                />
 
-          <circle cx="260" cy="180" r="3" fill="hsl(var(--terminal-green))" className="drop-shadow-[0_0_6px_hsl(var(--terminal-green))]" />
-          <text x="270" y="175" fontSize="8" fill="hsl(var(--terminal-green))" textAnchor="start">D-4</text>
-          <text x="270" y="185" fontSize="7" fill="hsl(var(--terminal-green))" textAnchor="start">00:59</text>
+                {/* Metric point */}
+                <circle
+                  cx={pos.x}
+                  cy={pos.y}
+                  r="5"
+                  fill={color}
+                  stroke={color}
+                  strokeWidth="2"
+                  className="drop-shadow-[0_0_8px_currentColor]"
+                  style={{ color }}
+                />
 
-          {/* Yellow agents (warnings) */}
-          <circle cx="120" cy="250" r="3" fill="hsl(var(--terminal-amber))" className="drop-shadow-[0_0_6px_hsl(var(--terminal-amber))]" />
-          <text x="110" y="245" fontSize="8" fill="hsl(var(--terminal-amber))" textAnchor="end">D-5</text>
-          <text x="110" y="255" fontSize="7" fill="hsl(var(--terminal-amber))" textAnchor="end">00:36</text>
+                {/* Metric label */}
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y - 8}
+                  fontSize="9"
+                  fontWeight="bold"
+                  fill="hsl(var(--terminal-green))"
+                  textAnchor="middle"
+                >
+                  {data.name}
+                </text>
 
-          <circle cx="310" cy="240" r="3" fill="hsl(var(--terminal-amber))" className="drop-shadow-[0_0_6px_hsl(var(--terminal-amber))]" />
-          <text x="320" y="235" fontSize="8" fill="hsl(var(--terminal-amber))" textAnchor="start">E-3</text>
-          <text x="320" y="245" fontSize="7" fill="hsl(var(--terminal-amber))" textAnchor="start">01:49</text>
+                {/* Metric value */}
+                <text
+                  x={labelPos.x}
+                  y={labelPos.y + 5}
+                  fontSize="10"
+                  fontWeight="bold"
+                  fill={color}
+                  textAnchor="middle"
+                >
+                  {data.name === "NETWORK" 
+                    ? `${metrics.network_io.toFixed(1)} MB/s`
+                    : `${data.value.toFixed(1)}%`
+                  }
+                </text>
+              </g>
+            );
+          })}
 
-          {/* Red agents (errors) */}
-          <circle cx="270" cy="100" r="3" fill="hsl(var(--terminal-red))" className="drop-shadow-[0_0_6px_hsl(var(--terminal-red))]" />
-          <text x="280" y="95" fontSize="8" fill="hsl(var(--terminal-red))" textAnchor="start">E-6</text>
-          <text x="280" y="105" fontSize="7" fill="hsl(var(--terminal-red))" textAnchor="start">01:28</text>
-
-          <circle cx="150" cy="310" r="3" fill="hsl(var(--terminal-red))" className="drop-shadow-[0_0_6px_hsl(var(--terminal-red))]" />
-          <text x="140" y="305" fontSize="8" fill="hsl(var(--terminal-red))" textAnchor="end">M-2</text>
-          <text x="140" y="315" fontSize="7" fill="hsl(var(--terminal-red))" textAnchor="end">00:11</text>
+          {/* Center point */}
+          <circle cx="200" cy="200" r="4" fill="hsl(var(--terminal-green))" />
+          <text x="200" y="218" fontSize="8" fill="hsl(var(--terminal-green))" textAnchor="middle" fontWeight="bold">
+            CORE
+          </text>
         </svg>
-
-        {/* Center point */}
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-          <div className="w-2 h-2 bg-primary rounded-full"></div>
-          <div className="text-[8px] text-primary text-center mt-1">WO-513</div>
-        </div>
       </div>
     </div>
   );
